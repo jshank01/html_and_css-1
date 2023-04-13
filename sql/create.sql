@@ -1,85 +1,36 @@
-CREATE TYPE US_State AS ENUM (
-        'AL',
-        'AK',
-        'AR',
-        'AZ',
-        'CA',
-        'CO',
-        'CT',
-        'DC',
-        'DE',
-        'FL',
-        'GA',
-        'HI',
-        'IA',
-        'ID',
-        'IL',
-        'IN',
-        'KS',
-        'KY',
-        'LA',
-        'MA',
-        'MD',
-        'ME',
-        'MI',
-        'MN',
-        'MO',
-        'MS',
-        'MT',
-        'NC',
-        'ND',
-        'NE',
-        'NH',
-        'NJ',
-        'NM',
-        'NV',
-        'NY',
-        'OK',
-        'OH',
-        'OR',
-        'PA',
-        'RI',
-        'SC',
-        'SD',
-        'TN',
-        'TX',
-        'UT',
-        'VA',
-        'VT',
-        'WA',
-        'WI',
-        'WV',
-        'WY');
-CREATE TYPE User_Address AS (
-    line_1 TEXT,
-    city TEXT,
-    us_state US_State,
-    zip TEXT);
 CREATE TYPE User_Role AS ENUM ('USER','ADMIN');
 CREATE TYPE Sex AS ENUM ('FEMALE', 'MALE', 'OTHER');
 CREATE TYPE MembershipType AS ENUM ('NONE','BASIC', 'SILVER','GOLD');
 
+CREATE TABLE images (
+    image_id UUID PRIMARY KEY,
+    bytes BYTEA NOT NULL
+);
+
 CREATE TABLE artworks (
-    object_number INT PRIMARY KEY,
-    artwork_title VARCHAR (256) UNIQUE NOT NULL,
+    object_number VARCHAR PRIMARY KEY,
     artist TEXT NOT NULL,
-    culture TEXT NOT NULL,
+    artwork_title VARCHAR (256) UNIQUE NOT NULL,
     made_on DATE NOT NULL,
     object_type TEXT NOT NULL,
-    art_department TEXT NOT NULL,
-    dimensions TEXT NOT NULL
+    image_id UUID UNIQUE NOT NULL REFERENCES images(image_id)
 );
 
 CREATE TABLE user_account (
     user_id UUID PRIMARY KEY,
     first_name VARCHAR (60) NOT NULL, 
     last_name VARCHAR (60) NOT NULL,
-    user_address User_Address NOT NULL, 
-    email VARCHAR (100) NOT NULL,
-    phone_number TEXT NOT NULL,
-    sex Sex NOT NULL,
+    email VARCHAR (100) NOT NULL UNIQUE,
     date_of_birth DATE NOT NULL,
-    membership MembershipType NOT NULL
+    membership MembershipType NOT NULL,
+    account_status VARCHAR(2) NOT NULL
+);
+
+CREATE TABLE user_login (
+    user_id UUID PRIMARY KEY REFERENCES user_account(user_id),
+    user_role User_Role NOT NULL,
+    user_name TEXT NOT NULL UNIQUE,
+    hashed_password TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE gift_shop_item (
@@ -102,13 +53,11 @@ CREATE TABLE gift_shop_item_inventory (
     gift_transaction_id UUID REFERENCES gift_shop_sales(gift_transaction_id)
 );
 
-
 CREATE TABLE employees (
     employee_id UUID PRIMARY KEY,
     employee_membership MembershipType NOT NULL,
     employee_first_name VARCHAR (60) NOT NULL,  
     employee_last_name VARCHAR (60) NOT NULL,
-    employee_address User_Address NOT NULL,
     employee_email VARCHAR (100) NOT NULL,
     employee_ssn TEXT NOT NULL,
     employee_phone_number TEXT NOT NULL,
@@ -126,12 +75,14 @@ CREATE TABLE exhibitions (
     exhib_artists TEXT NOT NULL
 );
 
-CREATE TABLE exhib_ticket_sales (
-    exhib_transac_id UUID PRIMARY KEY, 
+CREATE TABLE ticket_sales(
+    event_transac_id UUID PRIMARY KEY, 
     user_id UUID NOT NULL REFERENCES user_account(user_id), 
-    exhib_id UUID NOT NULL REFERENCES exhibitions(exhib_id),
-    exhib_transac_at TIMESTAMP NOT NULL
+    event_id UUID NOT NULL,
+    event_name TEXT NOT NULL,
+    num_tickets INTEGER NOT NULL
 );
+
 
 CREATE TABLE films (
     film_id UUID PRIMARY KEY,
@@ -143,37 +94,39 @@ CREATE TABLE films (
     film_rating TEXT NOT NULL
 );
 
-CREATE TABLE film_ticket_sales (
-    film_transac_id UUID PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES user_account(user_id),
-    film_id UUID NOT NULL REFERENCES films(film_id),
-    film_transac_at TIMESTAMP NOT NULL
-);
 
-CREATE TABLE calendar (
-    calendar_event_id UUID PRIMARY KEY,
-    event_name TEXT NOT NULL,
-    event_start DATE NOT NULL,
-    event_end DATE NOT NULL,
-    time_of_event_start TIME NOT NULL,
-    time_of_event_end TIME NOT NULL,
-    event_object_id UUID 
-);
 
 CREATE TABLE donation (
     donation_transaction_id UUID PRIMARY KEY,
-    donator_first_name VARCHAR (60) NOT NULL,
-    donator_last_name VARCHAR (60) NOT NULL,
     donator_email VARCHAR (100) NOT NULL,
     donation_on DATE NOT NULL,
     donation_amount MONEY NOT NULL
 );
 
-CREATE TABLE user_login (
-    user_id UUID PRIMARY KEY REFERENCES user_account(user_id),
-    user_role User_Role NOT NULL,
-    user_name TEXT NOT NULL UNIQUE,
-    hashed_password TEXT NOT NULL UNIQUE,
-    login_at TIMESTAMP NOT NULL
+CREATE TABLE notifs (
+    event_id UUID PRIMARY KEY,
+    event_title TEXT NOT NULL,
+    event_at TIMESTAMP NOT NULL
 );
-	
+
+CREATE FUNCTION exhibit_insert_trigger_fnc()
+  RETURNS trigger AS
+$$
+BEGIN
+    INSERT INTO "notifs" ("event_id", "event_title" ,"event_at")
+        VALUES (NEW."exhib_id", NEW."exhib_title", NEW."exhib_at");
+RETURN NEW;
+END;
+$$
+LANGUAGE 'plpgsql';
+
+CREATE TRIGGER new_exhib
+    AFTER INSERT 
+    ON "exhibitions"
+    FOR EACH ROW
+    EXECUTE PROCEDURE exhibit_insert_trigger_fnc();
+
+-- CREATE TRIGGER new_film
+--         AFTER INSERT ON films
+--         FOR EACH ROW
+--         EXECUTE FUNCTION film_insert_trigger_fnc();
